@@ -3,7 +3,7 @@
 <head>
     <title>Siber Arena</title>
     <style>
-        body { margin: 0; background: #111; overflow: hidden; }
+        body { margin: 0; background: #000; overflow: hidden; }
         canvas { display: block; }
     </style>
 </head>
@@ -18,35 +18,45 @@
         canvas.height = window.innerHeight;
 
         let players = {};
-        socket.on('currentPlayers', (p) => players = p);
-        socket.on('newPlayer', (p) => players[p.id] = p);
-        socket.on('playerMoved', (p) => players[p.id] = p);
-        socket.on('playerDisconnected', (id) => delete players[id]);
+
+        socket.on('currentPlayers', (p) => { players = p; });
+        socket.on('playerMoved', (p) => { players[p.id] = p; });
+        socket.on('playerDisconnected', (id) => { delete players[id]; });
 
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             for (let id in players) {
-                ctx.fillStyle = players[id].color;
-                ctx.fillRect(players[id].x, players[id].y, 30, 30);
+                const p = players[id];
+                ctx.fillStyle = p.color;
+                // KARAKTERİ BURADA BÜYÜTTÜK (30x30 Kare)
+                ctx.fillRect(p.x, p.y, 30, 30);
+                
+                // Eğer bu benim karakterimse etrafına beyaz çerçeve yap
+                if(id === socket.id) {
+                    ctx.strokeStyle = "white";
+                    ctx.strokeRect(p.x, p.y, 30, 30);
+                }
             }
             requestAnimationFrame(draw);
         }
         draw();
 
-        const input = { left: false, right: false, up: false, down: false };
+        const keys = { left: false, right: false, up: false, down: false };
+        const updateInput = () => socket.emit('playerInput', keys);
+
         window.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowLeft') input.left = true;
-            if (e.key === 'ArrowRight') input.right = true;
-            if (e.key === 'ArrowUp') input.up = true;
-            if (e.key === 'ArrowDown') input.down = true;
-            socket.emit('playerInput', input);
+            if (e.key === 'ArrowLeft') keys.left = true;
+            if (e.key === 'ArrowRight') keys.right = true;
+            if (e.key === 'ArrowUp') keys.up = true;
+            if (e.key === 'ArrowDown') keys.down = true;
+            updateInput();
         });
         window.addEventListener('keyup', (e) => {
-            if (e.key === 'ArrowLeft') input.left = false;
-            if (e.key === 'ArrowRight') input.right = false;
-            if (e.key === 'ArrowUp') input.up = false;
-            if (e.key === 'ArrowDown') input.down = false;
-            socket.emit('playerInput', input);
+            if (e.key === 'ArrowLeft') keys.left = false;
+            if (e.key === 'ArrowRight') keys.right = false;
+            if (e.key === 'ArrowUp') keys.up = false;
+            if (e.key === 'ArrowDown') keys.down = false;
+            updateInput();
         });
     </script>
 </body>
