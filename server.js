@@ -35,13 +35,16 @@ io.on('connection', (socket) => {
     socket.on('move', (data) => {
         let p = players[socket.id];
         if (p && p.isAlive) {
-            p.x = data.x; p.y = data.y;
+            p.x = data.x; 
+            p.y = data.y;
             p.isShielded = data.isShielded;
             p.isDashing = data.isDashing;
             p.angle = data.angle;
+            // Topun büyüklüğünü skora göre sunucu tarafında güncelle
+            p.radius = 20 + (p.score / 15); 
 
-            if (p.isDashing && p.score > 1) p.score -= 0.15; 
-            if (p.isShielded && p.score > 1) p.score -= 0.2; 
+            if (p.isDashing && p.score > 5) p.score -= 0.15; 
+            if (p.isShielded && p.score > 5) p.score -= 0.2; 
         }
     });
 
@@ -49,7 +52,6 @@ io.on('connection', (socket) => {
         let p = players[socket.id];
         if (p && p.isAlive && p.score >= 10 && !p.isShielded) {
             p.score -= 10;
-            p.radius = Math.max(15, p.radius - 0.2);
             bullets.push({ owner: socket.id, x: p.x, y: p.y, angle: data.angle, speed: 18, life: 60, color: p.color });
         }
     });
@@ -69,7 +71,6 @@ setInterval(() => {
             if (id !== b.owner && p.isAlive && Math.hypot(b.x - p.x, b.y - p.y) < p.radius) {
                 if (!p.isShielded) {
                     p.score = Math.max(0, p.score - 15);
-                    p.radius = Math.max(15, p.radius - 1);
                     if (players[b.owner]) players[b.owner].score += 20;
                 }
                 bullets.splice(i, 1);
@@ -82,9 +83,9 @@ setInterval(() => {
         if (!p.isAlive) continue;
         foods.forEach((f, fi) => {
             if (Math.hypot(p.x - f.x, p.y - f.y) < p.radius) {
-                if (f.type === 'normal') { p.score += 5; p.radius += 0.2; }
-                else if (f.type === 'gold') { p.score += 50; p.radius += 1; }
-                else if (f.type === 'poison') { p.score = Math.max(0, p.score - 30); p.radius = Math.max(15, p.radius - 2); }
+                if (f.type === 'normal') { p.score += 5; }
+                else if (f.type === 'gold') { p.score += 50; }
+                else if (f.type === 'poison') { p.score = Math.max(0, p.score - 30); }
                 foods[fi] = createFood(fi);
             }
         });
@@ -92,4 +93,5 @@ setInterval(() => {
     io.emit('updateState', { players, foods, bullets });
 }, 16);
 
-http.listen(3000);
+const PORT = process.env.PORT || 3000;
+http.listen(PORT, () => { console.log("Server running on port " + PORT); });
