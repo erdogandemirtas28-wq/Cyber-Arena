@@ -1,28 +1,23 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Cyber Arena: Pro Edition</title>
+    <title>Cyber Arena: Ultra Smooth</title>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: sans-serif; color: #0ff; }
-        #overlay { position: fixed; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10; }
-        input { padding: 12px; border: 2px solid #0ff; background: #000; color: #0ff; text-align: center; font-size: 1.2em; outline: none; }
-        button { margin-top: 15px; padding: 10px 40px; background: #0ff; border: none; cursor: pointer; font-weight: bold; font-size: 1.2em; }
-        #ui { position: fixed; top: 15px; left: 15px; background: rgba(0,0,0,0.7); padding: 12px; border: 1px solid #0ff; pointer-events: none; border-radius: 5px; }
-        #controls-bar { position: fixed; bottom: 15px; width: 100%; text-align: center; color: #0ff; font-size: 0.9em; text-shadow: 0 0 5px #0ff; }
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #0ff; }
+        #overlay { position: fixed; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; }
+        input { padding: 15px; border: 2px solid #0ff; background: #000; color: #0ff; text-align: center; font-size: 1.2em; border-radius: 30px; outline: none; box-shadow: 0 0 15px #0ff; }
+        button { margin-top: 20px; padding: 12px 50px; background: #0ff; border: none; cursor: pointer; font-weight: bold; font-size: 1.2em; border-radius: 30px; transition: 0.3s; }
+        button:hover { box-shadow: 0 0 25px #0ff; transform: scale(1.05); }
+        #ui { position: fixed; top: 20px; left: 20px; background: rgba(0,0,0,0.6); padding: 15px; border-left: 5px solid #0ff; pointer-events: none; }
     </style>
 </head>
 <body>
     <div id="overlay">
-        <h1>SIBER ARENA</h1>
-        <input type="text" id="nameInp" placeholder="SİSTEM ADI" maxlength="12">
-        <button id="startBtn">BAĞLAN</button>
+        <h1 style="letter-spacing: 10px;">CYBER ARENA</h1>
+        <input type="text" id="nameInp" placeholder="ENTER SYSTEM NAME" maxlength="12">
+        <button id="startBtn">INITIALIZE</button>
     </div>
-    
-    <div id="ui">ENERJİ: <span id="puan">0</span></div>
-    
-    <div id="controls-bar">
-        W: HIZLAN (TURBO) | D: KALKAN | SOL TIK: ATEŞ
-    </div>
+    <div id="ui">ENERGY: <span id="puan">0</span></div>
 
     <canvas id="gameCanvas"></canvas>
 
@@ -34,73 +29,70 @@
         canvas.width = window.innerWidth; canvas.height = window.innerHeight;
 
         let state = { players: {}, foods: [], bullets: [] };
+        let localPos = { x: 0, y: 0 }; // İstemci taraflı tahmin için yerel pozisyon
         let mouseX = 0, mouseY = 0, isWPressed = false, isDPressed = false;
+        let isGameStarted = false;
 
         window.onmousemove = (e) => { mouseX = e.clientX; mouseY = e.clientY; };
-        
         window.onkeydown = (e) => { 
-            const key = e.key.toLowerCase();
-            if(key === 'w') isWPressed = true; 
-            if(key === 'd') isDPressed = true;
+            if(e.key.toLowerCase() === 'w') isWPressed = true; 
+            if(e.key.toLowerCase() === 'd') isDPressed = true;
         };
         window.onkeyup = (e) => { 
-            const key = e.key.toLowerCase();
-            if(key === 'w') isWPressed = false; 
-            if(key === 'd') isDPressed = false;
+            if(e.key.toLowerCase() === 'w') isWPressed = false; 
+            if(e.key.toLowerCase() === 'd') isDPressed = false;
         };
-
-        window.onmousedown = (e) => { if(e.button === 0) fire(); };
+        window.onmousedown = () => socket.emit('fire', { angle: Math.atan2(mouseY - canvas.height/2, mouseX - canvas.width/2) });
 
         document.getElementById('startBtn').onclick = () => {
+            const name = document.getElementById('nameInp').value;
             document.getElementById('overlay').style.display = 'none';
-            socket.emit('joinGame', document.getElementById('nameInp').value);
+            socket.emit('joinGame', name);
+            isGameStarted = true;
         };
 
-        function fire() {
+        socket.on('updateState', (s) => {
+            state = s;
             const me = state.players[socket.id];
-            if(me && me.isAlive) {
-                let angle = Math.atan2(mouseY - canvas.height/2, mouseX - canvas.width/2);
-                socket.emit('fire', { angle: angle });
+            // Sunucudaki pozisyonu sadece başlangıçta veya büyük kaymalarda referans al
+            if (me && Math.hypot(localPos.x - me.x, localPos.y - me.y) > 100) {
+                localPos.x = me.x; localPos.y = me.y;
             }
-        }
-
-        socket.on('updateState', (s) => state = s);
+        });
 
         function gameLoop() {
-            const me = state.players[socket.id];
-            if (me && me.isAlive) {
+            const serverMe = state.players[socket.id];
+            if (serverMe && serverMe.isAlive) {
                 let dx = mouseX - canvas.width/2;
                 let dy = mouseY - canvas.height/2;
                 let angle = Math.atan2(dy, dx);
-                
-                // Hız kontrolü: W basılıysa ve enerji varsa 8 birim, yoksa 3 birim hız
-                let speed = (isWPressed && me.score > 10) ? 8 : 3;
-                
-                if (Math.hypot(dx, dy) > 15) {
-                    me.x += Math.cos(angle) * speed;
-                    me.y += Math.sin(angle) * speed;
-                }
+                let speed = (isWPressed && serverMe.score > 10) ? 9 : 3.5;
 
-                // Sunucuya yeni konumumuzu bildiriyoruz
-                socket.emit('move', { x: me.x, y: me.y, isShielded: isDPressed, isDashing: isWPressed, angle: angle });
-                document.getElementById('puan').innerText = Math.floor(me.score);
+                if (Math.hypot(dx, dy) > 20) {
+                    localPos.x += Math.cos(angle) * speed;
+                    localPos.y += Math.sin(angle) * speed;
+                }
+                
+                // Sunucuya her karede tahmin ettiğimiz pozisyonu bildiriyoruz
+                socket.emit('move', { x: localPos.x, y: localPos.y, isShielded: isDPressed, isDashing: isWPressed, angle: angle });
+                document.getElementById('puan').innerText = Math.floor(serverMe.score);
             }
 
             ctx.fillStyle = "#000"; ctx.fillRect(0, 0, canvas.width, canvas.height);
             
-            if (me) {
+            if (isGameStarted) {
                 ctx.save();
-                ctx.translate(canvas.width/2 - me.x, canvas.height/2 - me.y);
+                ctx.translate(canvas.width/2 - localPos.x, canvas.height/2 - localPos.y);
                 
-                // Arka Plan Grid (Daha teknolojik görünüm)
-                ctx.strokeStyle = "#0a2a2a"; ctx.lineWidth = 1;
-                for(let i=0; i<=3000; i+=150) {
+                // Arka Plan Grid
+                ctx.strokeStyle = "#052222"; ctx.lineWidth = 2;
+                for(let i=0; i<=3000; i+=200) {
                     ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,3000); ctx.stroke();
                     ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(3000,i); ctx.stroke();
                 }
 
                 state.foods.forEach(f => {
-                    ctx.beginPath(); ctx.arc(f.x, f.y, 6, 0, Math.PI*2);
+                    ctx.beginPath(); ctx.arc(f.x, f.y, 7, 0, Math.PI*2);
                     ctx.fillStyle = f.type === 'gold' ? '#ffd700' : (f.type === 'poison' ? '#f0f' : '#0ff');
                     ctx.fill();
                 });
@@ -114,16 +106,17 @@
                     let p = state.players[id];
                     if (!p.isAlive) continue;
                     
+                    // Diğer oyuncuları yumuşatmak için çizim (Lerp benzeri)
                     ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI*2);
-                    ctx.strokeStyle = p.color; ctx.lineWidth = 3; ctx.stroke();
-                    ctx.fillStyle = p.color + "33"; ctx.fill();
+                    ctx.strokeStyle = p.color; ctx.lineWidth = 4; ctx.stroke();
+                    ctx.fillStyle = p.color + "22"; ctx.fill();
                     
-                    if(p.isShielded) { 
-                        ctx.beginPath(); ctx.arc(p.x, p.y, p.radius + 8, 0, Math.PI*2); 
-                        ctx.strokeStyle="#fff"; ctx.lineWidth = 2; ctx.stroke();
+                    if(p.isShielded) {
+                        ctx.beginPath(); ctx.arc(p.x, p.y, p.radius + 10, 0, Math.PI*2);
+                        ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke();
                     }
-                    ctx.fillStyle = "#fff"; ctx.textAlign = "center";
-                    ctx.fillText(p.name, p.x, p.y - p.radius - 10);
+                    ctx.fillStyle = "#fff"; ctx.font = "bold 14px Arial"; ctx.textAlign = "center";
+                    ctx.fillText(p.name, p.x, p.y - p.radius - 12);
                 }
                 ctx.restore();
             }
