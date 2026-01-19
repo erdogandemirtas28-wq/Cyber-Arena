@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Siber Arena</title>
+    <style>
+        body { margin: 0; background: #111; overflow: hidden; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let players = {};
+        socket.on('currentPlayers', (p) => players = p);
+        socket.on('newPlayer', (p) => players[p.id] = p);
+        socket.on('playerMoved', (p) => players[p.id] = p);
+        socket.on('playerDisconnected', (id) => delete players[id]);
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (let id in players) {
+                ctx.fillStyle = players[id].color;
+                ctx.fillRect(players[id].x, players[id].y, 30, 30);
+            }
+            requestAnimationFrame(draw);
+        }
+        draw();
+
+        const input = { left: false, right: false, up: false, down: false };
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') input.left = true;
+            if (e.key === 'ArrowRight') input.right = true;
+            if (e.key === 'ArrowUp') input.up = true;
+            if (e.key === 'ArrowDown') input.down = true;
+            socket.emit('playerInput', input);
+        });
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft') input.left = false;
+            if (e.key === 'ArrowRight') input.right = false;
+            if (e.key === 'ArrowUp') input.up = false;
+            if (e.key === 'ArrowDown') input.down = false;
+            socket.emit('playerInput', input);
+        });
+    </script>
+</body>
+</html>
