@@ -1,63 +1,130 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Siber Arena</title>
+    <title>Cyber Arena: WASD Edition</title>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; }
-        canvas { display: block; }
+        body { margin: 0; background: #000; overflow: hidden; font-family: sans-serif; color: #0ff; }
+        #overlay { position: fixed; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10; }
+        input { padding: 12px; border: 2px solid #0ff; background: #000; color: #0ff; text-align: center; font-size: 1.2em; outline: none; }
+        button { margin-top: 15px; padding: 10px 40px; background: #0ff; border: none; cursor: pointer; font-weight: bold; font-size: 1.2em; }
+        #ui { position: fixed; top: 15px; left: 15px; background: rgba(0,0,0,0.7); padding: 12px; border: 1px solid #0ff; pointer-events: none; border-radius: 5px; }
+        #controls-bar { position: fixed; bottom: 15px; width: 100%; text-align: center; color: #0ff; font-size: 0.9em; text-shadow: 0 0 5px #0ff; }
     </style>
 </head>
 <body>
+    <div id="overlay">
+        <h1>SIBER ARENA</h1>
+        <input type="text" id="nameInp" placeholder="SİSTEM ADI" maxlength="12">
+        <button id="startBtn">BAĞLAN</button>
+    </div>
+    
+    <div id="ui">ENERJİ: <span id="puan">0</span></div>
+    
+    <div id="controls-bar">
+        W: HIZLAN | D: KALKAN | SOL TIK: ATEŞ
+    </div>
+
     <canvas id="gameCanvas"></canvas>
+
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        const socket = io();
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+        const socket = io();
+        canvas.width = window.innerWidth; canvas.height = window.innerHeight;
 
-        let players = {};
+        let state = { players: {}, foods: [], bullets: [] };
+        let mouseX = 0, mouseY = 0, isWPressed = false, isDPressed = false;
 
-        socket.on('currentPlayers', (p) => { players = p; });
-        socket.on('playerMoved', (p) => { players[p.id] = p; });
-        socket.on('playerDisconnected', (id) => { delete players[id]; });
+        window.onmousemove = (e) => { mouseX = e.clientX; mouseY = e.clientY; };
+        
+        window.onkeydown = (e) => { 
+            const key = e.key.toLowerCase();
+            if(key === 'w') isWPressed = true; 
+            if(key === 'd') isDPressed = true;
+        };
+        window.onkeyup = (e) => { 
+            const key = e.key.toLowerCase();
+            if(key === 'w') isWPressed = false; 
+            if(key === 'd') isDPressed = false;
+        };
 
-        function draw() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            for (let id in players) {
-                const p = players[id];
-                ctx.fillStyle = p.color;
-                // KARAKTERİ BURADA BÜYÜTTÜK (30x30 Kare)
-                ctx.fillRect(p.x, p.y, 30, 30);
-                
-                // Eğer bu benim karakterimse etrafına beyaz çerçeve yap
-                if(id === socket.id) {
-                    ctx.strokeStyle = "white";
-                    ctx.strokeRect(p.x, p.y, 30, 30);
-                }
-            }
-            requestAnimationFrame(draw);
+        window.onmousedown = (e) => { if(e.button === 0) fire(); };
+        window.oncontextmenu = (e) => e.preventDefault();
+
+        document.getElementById('startBtn').onclick = () => {
+            document.getElementById('overlay').style.display = 'none';
+            socket.emit('joinGame', document.getElementById('nameInp').value);
+        };
+
+        function fire() {
+            let angle = Math.atan2(mouseY - canvas.height/2, mouseX - canvas.width/2);
+            socket.emit('fire', { angle: angle });
         }
-        draw();
 
-        const keys = { left: false, right: false, up: false, down: false };
-        const updateInput = () => socket.emit('playerInput', keys);
+        socket.on('updateState', (s) => state = s);
 
-        window.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowLeft') keys.left = true;
-            if (e.key === 'ArrowRight') keys.right = true;
-            if (e.key === 'ArrowUp') keys.up = true;
-            if (e.key === 'ArrowDown') keys.down = true;
-            updateInput();
-        });
-        window.addEventListener('keyup', (e) => {
-            if (e.key === 'ArrowLeft') keys.left = false;
-            if (e.key === 'ArrowRight') keys.right = false;
-            if (e.key === 'ArrowUp') keys.up = false;
-            if (e.key === 'ArrowDown') keys.down = false;
-            updateInput();
-        });
+        function gameLoop() {
+            const me = state.players[socket.id];
+            if (me && me.isAlive) {
+                let dx = mouseX - canvas.width/2, dy = mouseY - canvas.height/2;
+                let angle = Math.atan2(dy, dx);
+                
+                // HIZ AYARI GÜNCELLENDİ
+                // Normal hız: 2.5 (Sakin) | Turbo hız: 10 (Agresif)
+                let speed = (isWPressed && me.score > 5) ? 10 : 2.5;
+                
+                if (Math.hypot(dx, dy) > 10) {
+                    me.x += Math.cos(angle) * speed;
+                    me.y += Math.sin(angle) * speed;
+                }
+                socket.emit('move', { x: me.x, y: me.y, isShielded: isDPressed, isDashing: isWPressed, angle: angle });
+                document.getElementById('puan').innerText = Math.floor(me.score);
+            }
+
+            ctx.fillStyle = "#000"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            if (me) {
+                ctx.save();
+                ctx.translate(canvas.width/2 - me.x, canvas.height/2 - me.y);
+                
+                // Arka Plan Grid
+                ctx.strokeStyle = "#0a1a1a"; ctx.lineWidth = 1;
+                for(let i=0; i<=3000; i+=150) {
+                    ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,3000); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(3000,i); ctx.stroke();
+                }
+
+                state.foods.forEach(f => {
+                    ctx.beginPath(); ctx.arc(f.x, f.y, 6, 0, Math.PI*2);
+                    ctx.fillStyle = f.type === 'gold' ? '#ffd700' : (f.type === 'poison' ? '#f0f' : '#0ff');
+                    ctx.fill();
+                });
+
+                state.bullets.forEach(b => {
+                    ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, Math.PI*2);
+                    ctx.fillStyle = "#fff"; ctx.fill();
+                });
+
+                for (let id in state.players) {
+                    let p = state.players[id];
+                    if (!p.isAlive) continue;
+                    
+                    ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI*2);
+                    ctx.strokeStyle = p.color; ctx.lineWidth = 3; ctx.stroke();
+                    ctx.fillStyle = p.color + "22"; ctx.fill();
+                    
+                    if(p.isShielded) { 
+                        ctx.beginPath(); ctx.arc(p.x, p.y, p.radius+7, 0, Math.PI*2); 
+                        ctx.strokeStyle="#fff"; ctx.lineWidth = 2; ctx.setLineDash([5, 5]); ctx.stroke(); ctx.setLineDash([]);
+                    }
+                    ctx.fillStyle = "#fff"; ctx.textAlign = "center";
+                    ctx.fillText(p.name, p.x, p.y - p.radius - 10);
+                }
+                ctx.restore();
+            }
+            requestAnimationFrame(gameLoop);
+        }
+        gameLoop();
     </script>
 </body>
 </html>
