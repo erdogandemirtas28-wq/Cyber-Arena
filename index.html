@@ -1,169 +1,121 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html>
 <head>
-    <meta charset="UTF-8">
+    <title>Dragon Arena Mobile</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Cyber Arena Mobile</title>
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX" crossorigin="anonymous"></script>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: sans-serif; color: #0ff; touch-action: none; }
-        #overlay { position: fixed; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; }
-        input { padding: 15px; border: 2px solid #0ff; background: #000; color: #0ff; border-radius: 20px; font-size: 1.2em; text-align: center; }
-        button#startBtn { margin-top: 15px; padding: 12px 50px; background: #0ff; border: none; font-weight: bold; border-radius: 20px; }
-        
-        /* Mobil Butonlar */
-        .mobile-btn { position: fixed; bottom: 30px; width: 70px; height: 70px; background: rgba(0, 255, 255, 0.2); border: 2px solid #0ff; border-radius: 50%; display: none; justify-content: center; align-items: center; font-weight: bold; z-index: 50; }
-        #fireBtn { right: 30px; bottom: 120px; }
-        #dashBtn { right: 30px; bottom: 30px; }
-        #joystick-area { position: fixed; bottom: 30px; left: 30px; width: 120px; height: 120px; background: rgba(0,255,255,0.1); border-radius: 50%; display: none; z-index: 50; }
-        #joystick-stick { position: absolute; width: 50px; height: 50px; background: #0ff; border-radius: 50%; top: 35px; left: 35px; }
-        
-        #ui { position: fixed; top: 15px; left: 15px; background: rgba(0,0,0,0.7); padding: 10px; border: 1px solid #0ff; pointer-events: none; }
-        
-        @media (pointer: coarse) { /* Sadece dokunmatik cihazlarda göster */
-            .mobile-btn, #joystick-area { display: flex; }
-        }
+        body { margin: 0; background: #000; overflow: hidden; font-family: sans-serif; color: #fff; touch-action: none; }
+        #overlay { position: fixed; width: 100%; height: 100%; background: rgba(0,0,0,0.95); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; text-align: center; }
+        .selection-box { display: flex; gap: 10px; margin: 10px; }
+        .opt { width: 40px; height: 40px; border: 2px solid #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 20px; border-radius: 10px; }
+        .selected { border-color: #0ff; box-shadow: 0 0 10px #0ff; }
+        #ad-container { position: absolute; bottom: 0; width: 100%; height: 60px; background: #222; display: none; }
     </style>
 </head>
 <body>
-    <div id="overlay">
-        <h1>CYBER ARENA</h1>
-        <input type="text" id="nameInp" placeholder="SİSTEM ADI" maxlength="12">
-        <button id="startBtn">GİRİŞ YAP</button>
+
+<div id="overlay">
+    <h1 style="color:#0ff">DRAGON ARENA</h1>
+    <input type="text" id="nameInp" placeholder="Ejderha Adı" maxlength="10" style="padding:10px; border-radius:10px;">
+    
+    <p>RENK SEÇ</p>
+    <div class="selection-box" id="colors">
+        <div class="opt selected" style="background:#ff4444" data-val="#ff4444"></div>
+        <div class="opt" style="background:#44ff44" data-val="#44ff44"></div>
+        <div class="opt" style="background:#4444ff" data-val="#4444ff"></div>
     </div>
 
-    <div id="ui">ENERJİ: <span id="puan">0</span></div>
+    <p>GÖRÜNÜM SEÇ</p>
+    <div class="selection-box" id="skins">
+        <div class="opt selected" data-val="🐲">🐲</div>
+        <div class="opt" data-val="🐉">🐉</div>
+        <div class="opt" data-val="🦖">🦖</div>
+    </div>
 
-    <div id="joystick-area"><div id="joystick-stick"></div></div>
-    <div id="fireBtn" class="mobile-btn">ATEŞ</div>
-    <div id="dashBtn" class="mobile-btn">HIZ</div>
+    <button id="startBtn" style="padding:15px 40px; background:#0ff; border:none; border-radius:20px; font-weight:bold; margin-top:20px;">SAVAŞA KATIL</button>
+</div>
 
-    <canvas id="gameCanvas"></canvas>
+<div id="ad-container">
+    <ins class="adsbygoogle" style="display:inline-block;width:320px;height:50px" data-ad-client="ca-pub-XXXXXXXX" data-ad-slot="XXXXXXX"></ins>
+</div>
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-        const socket = io();
-        canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+<div id="ui" style="position:fixed; top:20px; left:20px; font-size:20px; color:#0ff;">ENERJİ: <span id="puan">0</span></div>
 
-        let state = { players: {}, foods: [], bullets: [] };
-        let localPos = { x: 1500, y: 1500 }; 
-        let angle = 0, speedMult = 1, isDashing = false, isShielded = false;
-        let isMoving = false;
+<canvas id="gameCanvas"></canvas>
 
-        // Klavye Kontrolleri (PC)
-        window.onkeydown = (e) => { if(e.key.toLowerCase() === 'w') isDashing = true; };
-        window.onkeyup = (e) => { if(e.key.toLowerCase() === 'w') isDashing = false; };
-        window.onmousemove = (e) => {
-            if (!('ontouchstart' in window)) {
-                let dx = e.clientX - canvas.width/2;
-                let dy = e.clientY - canvas.height/2;
-                angle = Math.atan2(dy, dx);
-                isMoving = Math.hypot(dx, dy) > 20;
-            }
-        };
-        window.onmousedown = () => { if (!('ontouchstart' in window)) socket.emit('fire', { angle }); };
+<script src="/socket.io/socket.io.js"></script>
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const socket = io();
+    canvas.width = window.innerWidth; canvas.height = window.innerHeight;
 
-        // Mobil Kontroller (Joystick Mantığı)
-        const jArea = document.getElementById('joystick-area');
-        const jStick = document.getElementById('joystick-stick');
-        jArea.addEventListener('touchmove', (e) => {
-            const touch = e.touches[0];
-            const rect = jArea.getBoundingClientRect();
-            const centerX = rect.left + rect.width / 2;
-            const centerY = rect.top + rect.height / 2;
-            let dx = touch.clientX - centerX;
-            let dy = touch.clientY - centerY;
-            angle = Math.atan2(dy, dx);
-            isMoving = true;
+    let state = { players: {}, foods: [], bullets: [] };
+    let localPos = { x: 1500, y: 1500 };
+    let myColor = "#ff4444", mySkin = "🐲";
+
+    // Seçim Mantığı
+    document.querySelectorAll('#colors .opt').forEach(o => o.onclick = () => {
+        document.querySelectorAll('#colors .opt').forEach(i => i.classList.remove('selected'));
+        o.classList.add('selected'); myColor = o.dataset.val;
+    });
+    document.querySelectorAll('#skins .opt').forEach(o => o.onclick = () => {
+        document.querySelectorAll('#skins .opt').forEach(i => i.classList.remove('selected'));
+        o.classList.add('selected'); mySkin = o.dataset.val;
+    });
+
+    document.getElementById('startBtn').onclick = () => {
+        document.getElementById('overlay').style.display = 'none';
+        document.getElementById('ad-container').style.display = 'none';
+        socket.emit('joinGame', { name: document.getElementById('nameInp').value, color: myColor, skin: mySkin });
+    };
+
+    socket.on('playerDied', () => {
+        document.getElementById('overlay').style.display = 'flex';
+        document.getElementById('ad-container').style.display = 'block'; // Öldüğünde reklamı göster
+        (adsbygoogle = window.adsbygoogle || []).push({});
+    });
+
+    // Çizim Döngüsü (Ejderha Çizimi)
+    function draw() {
+        ctx.fillStyle = "#000"; ctx.fillRect(0,0,canvas.width, canvas.height);
+        const me = state.players[socket.id];
+        if(me && me.isAlive) {
+            // Hareket Mantığı (Daha önceki hızlandırılmış kod)
+            ctx.save();
+            ctx.translate(canvas.width/2 - me.x, canvas.height/2 - me.y);
             
-            // Görsel çubuğu hareket ettir
-            const dist = Math.min(40, Math.hypot(dx, dy));
-            jStick.style.transform = `translate(${Math.cos(angle)*dist}px, ${Math.sin(angle)*dist}px)`;
-        });
-        jArea.addEventListener('touchend', () => {
-            isMoving = false;
-            jStick.style.transform = `translate(0px, 0px)`;
-        });
+            // Ejderhaları Çiz
+            for(let id in state.players) {
+                let p = state.players[id];
+                if(!p.isAlive) continue;
 
-        document.getElementById('fireBtn').addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            socket.emit('fire', { angle });
-        });
-        document.getElementById('dashBtn').addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            isDashing = true;
-        });
-        document.getElementById('dashBtn').addEventListener('touchend', () => isDashing = false);
-
-        document.getElementById('startBtn').onclick = () => {
-            document.getElementById('overlay').style.display = 'none';
-            socket.emit('joinGame', document.getElementById('nameInp').value);
-        };
-
-        socket.on('updateState', (s) => {
-            state = s;
-            const me = state.players[socket.id];
-            if (me && me.isAlive && Math.hypot(localPos.x - me.x, localPos.y - me.y) > 150) {
-                localPos.x = me.x; localPos.y = me.y;
-            }
-        });
-
-        function gameLoop() {
-            const me = state.players[socket.id];
-            if (me && me.isAlive) {
-                let currentSpeed = (isDashing && me.score > 5) ? 12 : 5;
-                if (isMoving) {
-                    localPos.x += Math.cos(angle) * currentSpeed;
-                    localPos.y += Math.sin(angle) * currentSpeed;
-                }
-                localPos.x = Math.max(0, Math.min(3000, localPos.x));
-                localPos.y = Math.max(0, Math.min(3000, localPos.y));
-
-                socket.emit('move', { x: localPos.x, y: localPos.y, isShielded: isShielded, isDashing: isDashing, angle: angle });
-                document.getElementById('puan').innerText = Math.floor(me.score);
-            }
-
-            ctx.fillStyle = "#000"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            if (me) {
                 ctx.save();
-                ctx.translate(canvas.width/2 - localPos.x, canvas.height/2 - localPos.y);
+                ctx.translate(p.x, p.y);
+                ctx.rotate(p.angle);
                 
-                // Grid
-                ctx.strokeStyle = "#112222";
-                for(let i=0; i<=3000; i+=200) {
-                    ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,3000); ctx.stroke();
-                    ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(3000,i); ctx.stroke();
-                }
-
-                state.foods.forEach(f => {
-                    ctx.beginPath(); ctx.arc(f.x, f.y, 8, 0, Math.PI*2);
-                    ctx.fillStyle = f.type === 'gold' ? '#ffd700' : (f.type === 'poison' ? '#f00' : '#0ff');
-                    ctx.fill();
-                });
-
-                state.bullets.forEach(b => {
-                    ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, Math.PI*2);
-                    ctx.fillStyle = "#fff"; ctx.fill();
-                });
-
-                for (let id in state.players) {
-                    let p = state.players[id];
-                    if (!p.isAlive) continue;
-                    let dX = (id === socket.id) ? localPos.x : p.x;
-                    let dY = (id === socket.id) ? localPos.y : p.y;
-                    ctx.beginPath(); ctx.arc(dX, dY, p.radius, 0, Math.PI*2);
-                    ctx.strokeStyle = p.color; ctx.lineWidth = 4; ctx.stroke();
-                    ctx.fillStyle = p.color + "33"; ctx.fill();
-                    ctx.fillStyle = "#fff"; ctx.textAlign = "center";
-                    ctx.fillText(p.name, dX, dY - p.radius - 10);
-                }
+                // Ejderha Gövdesi (Parlayan Halka)
+                ctx.shadowBlur = 20; ctx.shadowColor = p.color;
+                ctx.fillStyle = p.color + "55";
+                ctx.beginPath(); ctx.arc(0,0, p.radius, 0, Math.PI*2); ctx.fill();
+                
+                // Ejderha Kafası (Emoji/Görünüm)
+                ctx.shadowBlur = 0;
+                ctx.font = (p.radius * 1.5) + "px serif";
+                ctx.textAlign = "center"; ctx.textBaseline = "middle";
+                ctx.fillText(p.skin, 0, 0); 
+                
                 ctx.restore();
+                
+                ctx.fillStyle = "#fff"; ctx.fillText(p.name, p.x, p.y - p.radius - 10);
             }
-            requestAnimationFrame(gameLoop);
+            ctx.restore();
         }
-        gameLoop();
-    </script>
+        requestAnimationFrame(draw);
+    }
+    socket.on('updateState', s => state = s);
+    draw();
+</script>
 </body>
 </html>
