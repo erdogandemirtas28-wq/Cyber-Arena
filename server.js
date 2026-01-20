@@ -28,19 +28,13 @@ io.on('connection', (socket) => {
             p.x = data.x; p.y = data.y; p.angle = data.angle;
             p.isShielded = data.isShielded; p.isDashing = data.isDashing;
             p.radius = 20 + (p.score / 15);
-            
-            // Enerji Tüketimi
             if (p.isDashing && p.score > 5) p.score -= 0.1;
             if (p.isShielded && p.score > 5) p.score -= 0.15;
 
-            // Enerji Yeme Kontrolü (Sunucu tarafı)
             foods.forEach((f, fi) => {
-                let dist = Math.hypot(p.x - f.x, p.y - f.y);
-                if (dist < p.radius + 5) { // Yeme mesafesi artırıldı
-                    if (f.type === 'normal') p.score += 5;
-                    else if (f.type === 'gold') p.score += 25;
-                    else if (f.type === 'poison') p.score = Math.max(0, p.score - 20);
-                    foods[fi] = createFood(fi); // Yeni yemek oluştur
+                if (Math.hypot(p.x - f.x, p.y - f.y) < p.radius + 5) {
+                    p.score += f.type === 'gold' ? 25 : (f.type === 'poison' ? -20 : 5);
+                    foods[fi] = createFood(fi);
                 }
             });
         }
@@ -50,7 +44,7 @@ io.on('connection', (socket) => {
         let p = players[socket.id];
         if (p && p.isAlive && p.score >= 10 && !p.isShielded) {
             p.score -= 10;
-            bullets.push({ owner: socket.id, x: p.x, y: p.y, angle: data.angle, speed: 15, life: 60 });
+            bullets.push({ owner: socket.id, x: p.x, y: p.y, angle: data.angle, speed: 18, life: 60 });
         }
     });
     socket.on('disconnect', () => { delete players[socket.id]; });
@@ -64,7 +58,7 @@ setInterval(() => {
         if (b.life <= 0) bullets.splice(i, 1);
     });
     io.emit('updateState', { players, foods, bullets });
-}, 20); // Daha sık paket gönderimi
+}, 20);
 
 const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => console.log("Server Running"));
+http.listen(PORT, () => console.log("Mobil Uyumlu Server Aktif"));

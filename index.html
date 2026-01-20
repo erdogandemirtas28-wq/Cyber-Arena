@@ -1,22 +1,42 @@
 <!DOCTYPE html>
-<html>
+<html lang="tr">
 <head>
-    <title>Cyber Arena: Super Smooth</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cyber Arena Mobile</title>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: sans-serif; color: #0ff; }
+        body { margin: 0; background: #000; overflow: hidden; font-family: sans-serif; color: #0ff; touch-action: none; }
         #overlay { position: fixed; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; }
-        input { padding: 15px; border: 2px solid #0ff; background: #000; color: #0ff; font-size: 1.2em; border-radius: 20px; outline: none; }
-        button { margin-top: 15px; padding: 10px 40px; background: #0ff; border: none; cursor: pointer; font-weight: bold; border-radius: 20px; }
-        #ui { position: fixed; top: 15px; left: 15px; background: rgba(0,0,0,0.7); padding: 15px; border: 1px solid #0ff; }
+        input { padding: 15px; border: 2px solid #0ff; background: #000; color: #0ff; border-radius: 20px; font-size: 1.2em; text-align: center; }
+        button#startBtn { margin-top: 15px; padding: 12px 50px; background: #0ff; border: none; font-weight: bold; border-radius: 20px; }
+        
+        /* Mobil Butonlar */
+        .mobile-btn { position: fixed; bottom: 30px; width: 70px; height: 70px; background: rgba(0, 255, 255, 0.2); border: 2px solid #0ff; border-radius: 50%; display: none; justify-content: center; align-items: center; font-weight: bold; z-index: 50; }
+        #fireBtn { right: 30px; bottom: 120px; }
+        #dashBtn { right: 30px; bottom: 30px; }
+        #joystick-area { position: fixed; bottom: 30px; left: 30px; width: 120px; height: 120px; background: rgba(0,255,255,0.1); border-radius: 50%; display: none; z-index: 50; }
+        #joystick-stick { position: absolute; width: 50px; height: 50px; background: #0ff; border-radius: 50%; top: 35px; left: 35px; }
+        
+        #ui { position: fixed; top: 15px; left: 15px; background: rgba(0,0,0,0.7); padding: 10px; border: 1px solid #0ff; pointer-events: none; }
+        
+        @media (pointer: coarse) { /* Sadece dokunmatik cihazlarda göster */
+            .mobile-btn, #joystick-area { display: flex; }
+        }
     </style>
 </head>
 <body>
     <div id="overlay">
-        <h1>SIBER ARENA</h1>
-        <input type="text" id="nameInp" placeholder="ADINIZI YAZIN" maxlength="12">
-        <button id="startBtn">BAŞLA</button>
+        <h1>CYBER ARENA</h1>
+        <input type="text" id="nameInp" placeholder="SİSTEM ADI" maxlength="12">
+        <button id="startBtn">GİRİŞ YAP</button>
     </div>
+
     <div id="ui">ENERJİ: <span id="puan">0</span></div>
+
+    <div id="joystick-area"><div id="joystick-stick"></div></div>
+    <div id="fireBtn" class="mobile-btn">ATEŞ</div>
+    <div id="dashBtn" class="mobile-btn">HIZ</div>
+
     <canvas id="gameCanvas"></canvas>
 
     <script src="/socket.io/socket.io.js"></script>
@@ -28,21 +48,53 @@
 
         let state = { players: {}, foods: [], bullets: [] };
         let localPos = { x: 1500, y: 1500 }; 
-        let mouseX = 0, mouseY = 0, isWPressed = false, isDPressed = false;
+        let angle = 0, speedMult = 1, isDashing = false, isShielded = false;
+        let isMoving = false;
 
-        window.onmousemove = (e) => { mouseX = e.clientX; mouseY = e.clientY; };
-        window.onkeydown = (e) => { 
-            if(e.key.toLowerCase() === 'w') isWPressed = true; 
-            if(e.key.toLowerCase() === 'd') isDPressed = true;
+        // Klavye Kontrolleri (PC)
+        window.onkeydown = (e) => { if(e.key.toLowerCase() === 'w') isDashing = true; };
+        window.onkeyup = (e) => { if(e.key.toLowerCase() === 'w') isDashing = false; };
+        window.onmousemove = (e) => {
+            if (!('ontouchstart' in window)) {
+                let dx = e.clientX - canvas.width/2;
+                let dy = e.clientY - canvas.height/2;
+                angle = Math.atan2(dy, dx);
+                isMoving = Math.hypot(dx, dy) > 20;
+            }
         };
-        window.onkeyup = (e) => { 
-            if(e.key.toLowerCase() === 'w') isWPressed = false; 
-            if(e.key.toLowerCase() === 'd') isDPressed = false;
-        };
-        window.onmousedown = () => {
-            const me = state.players[socket.id];
-            if(me && me.isAlive) socket.emit('fire', { angle: Math.atan2(mouseY - canvas.height/2, mouseX - canvas.width/2) });
-        };
+        window.onmousedown = () => { if (!('ontouchstart' in window)) socket.emit('fire', { angle }); };
+
+        // Mobil Kontroller (Joystick Mantığı)
+        const jArea = document.getElementById('joystick-area');
+        const jStick = document.getElementById('joystick-stick');
+        jArea.addEventListener('touchmove', (e) => {
+            const touch = e.touches[0];
+            const rect = jArea.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            let dx = touch.clientX - centerX;
+            let dy = touch.clientY - centerY;
+            angle = Math.atan2(dy, dx);
+            isMoving = true;
+            
+            // Görsel çubuğu hareket ettir
+            const dist = Math.min(40, Math.hypot(dx, dy));
+            jStick.style.transform = `translate(${Math.cos(angle)*dist}px, ${Math.sin(angle)*dist}px)`;
+        });
+        jArea.addEventListener('touchend', () => {
+            isMoving = false;
+            jStick.style.transform = `translate(0px, 0px)`;
+        });
+
+        document.getElementById('fireBtn').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            socket.emit('fire', { angle });
+        });
+        document.getElementById('dashBtn').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            isDashing = true;
+        });
+        document.getElementById('dashBtn').addEventListener('touchend', () => isDashing = false);
 
         document.getElementById('startBtn').onclick = () => {
             document.getElementById('overlay').style.display = 'none';
@@ -53,27 +105,22 @@
             state = s;
             const me = state.players[socket.id];
             if (me && me.isAlive && Math.hypot(localPos.x - me.x, localPos.y - me.y) > 150) {
-                localPos.x = me.x; localPos.y = me.y; // Sunucuyla çok fark varsa eşitle
+                localPos.x = me.x; localPos.y = me.y;
             }
         });
 
         function gameLoop() {
             const me = state.players[socket.id];
             if (me && me.isAlive) {
-                let dx = mouseX - canvas.width/2, dy = mouseY - canvas.height/2;
-                let angle = Math.atan2(dy, dx);
-                let speed = (isWPressed && me.score > 5) ? 12 : 5; // Hız artırıldı
-
-                if (Math.hypot(dx, dy) > 20) {
-                    localPos.x += Math.cos(angle) * speed;
-                    localPos.y += Math.sin(angle) * speed;
+                let currentSpeed = (isDashing && me.score > 5) ? 12 : 5;
+                if (isMoving) {
+                    localPos.x += Math.cos(angle) * currentSpeed;
+                    localPos.y += Math.sin(angle) * currentSpeed;
                 }
-                
-                // Sınırları koru
                 localPos.x = Math.max(0, Math.min(3000, localPos.x));
                 localPos.y = Math.max(0, Math.min(3000, localPos.y));
 
-                socket.emit('move', { x: localPos.x, y: localPos.y, isShielded: isDPressed, isDashing: isWPressed, angle: angle });
+                socket.emit('move', { x: localPos.x, y: localPos.y, isShielded: isShielded, isDashing: isDashing, angle: angle });
                 document.getElementById('puan').innerText = Math.floor(me.score);
             }
 
@@ -84,8 +131,8 @@
                 ctx.translate(canvas.width/2 - localPos.x, canvas.height/2 - localPos.y);
                 
                 // Grid
-                ctx.strokeStyle = "#112222"; ctx.lineWidth = 1;
-                for(let i=0; i<=3000; i+=150) {
+                ctx.strokeStyle = "#112222";
+                for(let i=0; i<=3000; i+=200) {
                     ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,3000); ctx.stroke();
                     ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(3000,i); ctx.stroke();
                 }
@@ -96,22 +143,21 @@
                     ctx.fill();
                 });
 
+                state.bullets.forEach(b => {
+                    ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, Math.PI*2);
+                    ctx.fillStyle = "#fff"; ctx.fill();
+                });
+
                 for (let id in state.players) {
                     let p = state.players[id];
                     if (!p.isAlive) continue;
-                    let drawX = (id === socket.id) ? localPos.x : p.x;
-                    let drawY = (id === socket.id) ? localPos.y : p.y;
-
-                    ctx.beginPath(); ctx.arc(drawX, drawY, p.radius, 0, Math.PI*2);
+                    let dX = (id === socket.id) ? localPos.x : p.x;
+                    let dY = (id === socket.id) ? localPos.y : p.y;
+                    ctx.beginPath(); ctx.arc(dX, dY, p.radius, 0, Math.PI*2);
                     ctx.strokeStyle = p.color; ctx.lineWidth = 4; ctx.stroke();
                     ctx.fillStyle = p.color + "33"; ctx.fill();
-                    
-                    if(p.isShielded) {
-                        ctx.beginPath(); ctx.arc(drawX, drawY, p.radius + 10, 0, Math.PI*2);
-                        ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke();
-                    }
                     ctx.fillStyle = "#fff"; ctx.textAlign = "center";
-                    ctx.fillText(p.name, drawX, drawY - p.radius - 10);
+                    ctx.fillText(p.name, dX, dY - p.radius - 10);
                 }
                 ctx.restore();
             }
