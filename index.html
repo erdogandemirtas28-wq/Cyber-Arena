@@ -1,24 +1,22 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Cyber Arena: Ultra Smooth</title>
+    <title>Cyber Arena: Super Smooth</title>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #0ff; }
-        #overlay { position: fixed; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; }
-        input { padding: 15px; border: 2px solid #0ff; background: #000; color: #0ff; text-align: center; font-size: 1.2em; border-radius: 30px; outline: none; box-shadow: 0 0 15px #0ff; }
-        button { margin-top: 20px; padding: 12px 50px; background: #0ff; border: none; cursor: pointer; font-weight: bold; font-size: 1.2em; border-radius: 30px; transition: 0.3s; }
-        button:hover { box-shadow: 0 0 25px #0ff; transform: scale(1.05); }
-        #ui { position: fixed; top: 20px; left: 20px; background: rgba(0,0,0,0.6); padding: 15px; border-left: 5px solid #0ff; pointer-events: none; }
+        body { margin: 0; background: #000; overflow: hidden; font-family: sans-serif; color: #0ff; }
+        #overlay { position: fixed; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; }
+        input { padding: 15px; border: 2px solid #0ff; background: #000; color: #0ff; font-size: 1.2em; border-radius: 20px; outline: none; }
+        button { margin-top: 15px; padding: 10px 40px; background: #0ff; border: none; cursor: pointer; font-weight: bold; border-radius: 20px; }
+        #ui { position: fixed; top: 15px; left: 15px; background: rgba(0,0,0,0.7); padding: 15px; border: 1px solid #0ff; }
     </style>
 </head>
 <body>
     <div id="overlay">
-        <h1 style="letter-spacing: 10px;">CYBER ARENA</h1>
-        <input type="text" id="nameInp" placeholder="ENTER SYSTEM NAME" maxlength="12">
-        <button id="startBtn">INITIALIZE</button>
+        <h1>SIBER ARENA</h1>
+        <input type="text" id="nameInp" placeholder="ADINIZI YAZIN" maxlength="12">
+        <button id="startBtn">BAŞLA</button>
     </div>
-    <div id="ui">ENERGY: <span id="puan">0</span></div>
-
+    <div id="ui">ENERJİ: <span id="puan">0</span></div>
     <canvas id="gameCanvas"></canvas>
 
     <script src="/socket.io/socket.io.js"></script>
@@ -29,9 +27,8 @@
         canvas.width = window.innerWidth; canvas.height = window.innerHeight;
 
         let state = { players: {}, foods: [], bullets: [] };
-        let localPos = { x: 0, y: 0 }; // İstemci taraflı tahmin için yerel pozisyon
+        let localPos = { x: 1500, y: 1500 }; 
         let mouseX = 0, mouseY = 0, isWPressed = false, isDPressed = false;
-        let isGameStarted = false;
 
         window.onmousemove = (e) => { mouseX = e.clientX; mouseY = e.clientY; };
         window.onkeydown = (e) => { 
@@ -42,81 +39,79 @@
             if(e.key.toLowerCase() === 'w') isWPressed = false; 
             if(e.key.toLowerCase() === 'd') isDPressed = false;
         };
-        window.onmousedown = () => socket.emit('fire', { angle: Math.atan2(mouseY - canvas.height/2, mouseX - canvas.width/2) });
+        window.onmousedown = () => {
+            const me = state.players[socket.id];
+            if(me && me.isAlive) socket.emit('fire', { angle: Math.atan2(mouseY - canvas.height/2, mouseX - canvas.width/2) });
+        };
 
         document.getElementById('startBtn').onclick = () => {
-            const name = document.getElementById('nameInp').value;
             document.getElementById('overlay').style.display = 'none';
-            socket.emit('joinGame', name);
-            isGameStarted = true;
+            socket.emit('joinGame', document.getElementById('nameInp').value);
         };
 
         socket.on('updateState', (s) => {
             state = s;
             const me = state.players[socket.id];
-            // Sunucudaki pozisyonu sadece başlangıçta veya büyük kaymalarda referans al
-            if (me && Math.hypot(localPos.x - me.x, localPos.y - me.y) > 100) {
-                localPos.x = me.x; localPos.y = me.y;
+            if (me && me.isAlive && Math.hypot(localPos.x - me.x, localPos.y - me.y) > 150) {
+                localPos.x = me.x; localPos.y = me.y; // Sunucuyla çok fark varsa eşitle
             }
         });
 
         function gameLoop() {
-            const serverMe = state.players[socket.id];
-            if (serverMe && serverMe.isAlive) {
-                let dx = mouseX - canvas.width/2;
-                let dy = mouseY - canvas.height/2;
+            const me = state.players[socket.id];
+            if (me && me.isAlive) {
+                let dx = mouseX - canvas.width/2, dy = mouseY - canvas.height/2;
                 let angle = Math.atan2(dy, dx);
-                let speed = (isWPressed && serverMe.score > 10) ? 9 : 3.5;
+                let speed = (isWPressed && me.score > 5) ? 12 : 5; // Hız artırıldı
 
                 if (Math.hypot(dx, dy) > 20) {
                     localPos.x += Math.cos(angle) * speed;
                     localPos.y += Math.sin(angle) * speed;
                 }
                 
-                // Sunucuya her karede tahmin ettiğimiz pozisyonu bildiriyoruz
+                // Sınırları koru
+                localPos.x = Math.max(0, Math.min(3000, localPos.x));
+                localPos.y = Math.max(0, Math.min(3000, localPos.y));
+
                 socket.emit('move', { x: localPos.x, y: localPos.y, isShielded: isDPressed, isDashing: isWPressed, angle: angle });
-                document.getElementById('puan').innerText = Math.floor(serverMe.score);
+                document.getElementById('puan').innerText = Math.floor(me.score);
             }
 
             ctx.fillStyle = "#000"; ctx.fillRect(0, 0, canvas.width, canvas.height);
             
-            if (isGameStarted) {
+            if (me) {
                 ctx.save();
                 ctx.translate(canvas.width/2 - localPos.x, canvas.height/2 - localPos.y);
                 
-                // Arka Plan Grid
-                ctx.strokeStyle = "#052222"; ctx.lineWidth = 2;
-                for(let i=0; i<=3000; i+=200) {
+                // Grid
+                ctx.strokeStyle = "#112222"; ctx.lineWidth = 1;
+                for(let i=0; i<=3000; i+=150) {
                     ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,3000); ctx.stroke();
                     ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(3000,i); ctx.stroke();
                 }
 
                 state.foods.forEach(f => {
-                    ctx.beginPath(); ctx.arc(f.x, f.y, 7, 0, Math.PI*2);
-                    ctx.fillStyle = f.type === 'gold' ? '#ffd700' : (f.type === 'poison' ? '#f0f' : '#0ff');
+                    ctx.beginPath(); ctx.arc(f.x, f.y, 8, 0, Math.PI*2);
+                    ctx.fillStyle = f.type === 'gold' ? '#ffd700' : (f.type === 'poison' ? '#f00' : '#0ff');
                     ctx.fill();
-                });
-
-                state.bullets.forEach(b => {
-                    ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, Math.PI*2);
-                    ctx.fillStyle = "#fff"; ctx.fill();
                 });
 
                 for (let id in state.players) {
                     let p = state.players[id];
                     if (!p.isAlive) continue;
-                    
-                    // Diğer oyuncuları yumuşatmak için çizim (Lerp benzeri)
-                    ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI*2);
+                    let drawX = (id === socket.id) ? localPos.x : p.x;
+                    let drawY = (id === socket.id) ? localPos.y : p.y;
+
+                    ctx.beginPath(); ctx.arc(drawX, drawY, p.radius, 0, Math.PI*2);
                     ctx.strokeStyle = p.color; ctx.lineWidth = 4; ctx.stroke();
-                    ctx.fillStyle = p.color + "22"; ctx.fill();
+                    ctx.fillStyle = p.color + "33"; ctx.fill();
                     
                     if(p.isShielded) {
-                        ctx.beginPath(); ctx.arc(p.x, p.y, p.radius + 10, 0, Math.PI*2);
+                        ctx.beginPath(); ctx.arc(drawX, drawY, p.radius + 10, 0, Math.PI*2);
                         ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke();
                     }
-                    ctx.fillStyle = "#fff"; ctx.font = "bold 14px Arial"; ctx.textAlign = "center";
-                    ctx.fillText(p.name, p.x, p.y - p.radius - 12);
+                    ctx.fillStyle = "#fff"; ctx.textAlign = "center";
+                    ctx.fillText(p.name, drawX, drawY - p.radius - 10);
                 }
                 ctx.restore();
             }

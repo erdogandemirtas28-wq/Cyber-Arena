@@ -1,9 +1,7 @@
 const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
-const io = require('socket.io')(http, {
-    cors: { origin: "*" }
-});
+const io = require('socket.io')(http, { cors: { origin: "*" } });
 app.use(express.static(__dirname));
 
 let players = {};
@@ -15,21 +13,13 @@ function createFood(id) {
     const types = ['normal', 'gold', 'poison'];
     return { id, x: Math.random() * MAP_SIZE, y: Math.random() * MAP_SIZE, type: types[Math.floor(Math.random() * types.length)] };
 }
-for (let i = 0; i < 200; i++) foods.push(createFood(i));
+for (let i = 0; i < 250; i++) foods.push(createFood(i));
 
 io.on('connection', (socket) => {
     players[socket.id] = { x: 0, y: 0, radius: 0, color: `hsl(${Math.random() * 360}, 80%, 50%)`, score: 0, isAlive: false, name: "" };
 
     socket.on('joinGame', (name) => {
-        players[socket.id] = {
-            ...players[socket.id],
-            name: name || "Player",
-            x: Math.random() * MAP_SIZE,
-            y: Math.random() * MAP_SIZE,
-            radius: 20,
-            score: 50,
-            isAlive: true
-        };
+        players[socket.id] = { ...players[socket.id], name: name || "Player", x: Math.random() * MAP_SIZE, y: Math.random() * MAP_SIZE, radius: 20, score: 50, isAlive: true };
     });
 
     socket.on('move', (data) => {
@@ -37,9 +27,22 @@ io.on('connection', (socket) => {
         if (p && p.isAlive) {
             p.x = data.x; p.y = data.y; p.angle = data.angle;
             p.isShielded = data.isShielded; p.isDashing = data.isDashing;
+            p.radius = 20 + (p.score / 15);
+            
+            // Enerji Tüketimi
             if (p.isDashing && p.score > 5) p.score -= 0.1;
             if (p.isShielded && p.score > 5) p.score -= 0.15;
-            p.radius = 20 + (p.score / 15);
+
+            // Enerji Yeme Kontrolü (Sunucu tarafı)
+            foods.forEach((f, fi) => {
+                let dist = Math.hypot(p.x - f.x, p.y - f.y);
+                if (dist < p.radius + 5) { // Yeme mesafesi artırıldı
+                    if (f.type === 'normal') p.score += 5;
+                    else if (f.type === 'gold') p.score += 25;
+                    else if (f.type === 'poison') p.score = Math.max(0, p.score - 20);
+                    foods[fi] = createFood(fi); // Yeni yemek oluştur
+                }
+            });
         }
     });
 
@@ -61,7 +64,7 @@ setInterval(() => {
         if (b.life <= 0) bullets.splice(i, 1);
     });
     io.emit('updateState', { players, foods, bullets });
-}, 30); // 33 FPS sunucu güncelleme hızı
+}, 20); // Daha sık paket gönderimi
 
 const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => console.log("Server running..."));
+http.listen(PORT, () => console.log("Server Running"));
